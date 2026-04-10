@@ -1,151 +1,309 @@
 {% extends "base.html" %}
 
-{% block title %}Análise — {{ client_name }}{% endblock %}
+{% block title %}Análise — {{ result.client }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kpi-card .kpi-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; }
+  .kpi-card .kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+  .kpi-card .kpi-sub   { font-size: .78rem; }
+  .score-bar { height: 6px; border-radius: 3px; }
+  .diagnosis-text { font-size: .78rem; line-height: 1.4; }
+  .rec-number {
+    width: 2rem; height: 2rem; min-width: 2rem;
+    border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; font-size: .9rem;
+  }
+  .highlight-card { border-left: 3px solid; }
+  .highlight-card.best  { border-color: #198754; }
+  .highlight-card.worst { border-color: #dc3545; }
+</style>
+{% endblock %}
 
 {% block content %}
 
-<!-- Header -->
+{# ── Macros ──────────────────────────────────────────────────────────────── #}
+
+{% macro status_badge(status) %}
+  {% if status == "Escalar" %}
+    <span class="badge bg-success">{{ status }}</span>
+  {% elif status == "Manter" %}
+    <span class="badge bg-info text-dark">{{ status }}</span>
+  {% elif status == "Otimizar" %}
+    <span class="badge bg-warning text-dark">{{ status }}</span>
+  {% else %}
+    <span class="badge bg-danger">{{ status }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro score_bar(score) %}
+  {% if score >= 80 %}{% set bar_color = "bg-success" %}
+  {% elif score >= 60 %}{% set bar_color = "bg-info" %}
+  {% elif score >= 40 %}{% set bar_color = "bg-warning" %}
+  {% else %}{% set bar_color = "bg-danger" %}
+  {% endif %}
+  <div class="d-flex align-items-center gap-2">
+    <div class="progress flex-grow-1 score-bar">
+      <div class="progress-bar {{ bar_color }}" style="width:{{ score }}%"></div>
+    </div>
+    <span class="small text-muted" style="min-width:2rem">{{ score }}</span>
+  </div>
+{% endmacro %}
+
+{# ── Header ──────────────────────────────────────────────────────────────── #}
+
 <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
   <div>
-    <h4 class="fw-semibold mb-1">{{ client_name }}</h4>
+    <h4 class="fw-semibold mb-1">{{ result.client }}</h4>
     <p class="text-muted mb-0">
-      <span class="badge
-        {% if platform == 'meta' %}badge-meta{% else %}badge-google{% endif %}
-        me-2">
+      <span class="badge {% if platform == 'meta' %}badge-meta{% else %}badge-google{% endif %} me-2">
         {{ platform_label }}
       </span>
-      {% if date_start and date_end %}
-        {{ date_start }} &rarr; {{ date_end }}
-      {% elif date_start %}
-        A partir de {{ date_start }}
-      {% elif date_end %}
-        Até {{ date_end }}
-      {% else %}
-        Período não informado
-      {% endif %}
+      {{ result.period }}
+      &nbsp;&middot;&nbsp;
+      <span class="text-muted">{{ result.campaigns | length }} campanha{{ 's' if result.campaigns | length != 1 }}</span>
     </p>
   </div>
   <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
-    &larr; Nova análise
+    <i class="bi bi-arrow-left me-1"></i>Nova análise
   </a>
 </div>
 
-<!-- Summary cards -->
+{# ── KPI Cards ───────────────────────────────────────────────────────────── #}
+
+<div class="row g-3 mb-3">
+
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
+      <div class="card-body py-3">
+        <div class="kpi-label text-muted mb-1">Total investido</div>
+        <div class="kpi-value">{{ result.summary.total_spend | brl }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
+      <div class="card-body py-3">
+        <div class="kpi-label text-muted mb-1">Impressões</div>
+        <div class="kpi-value">{{ result.summary.total_impressions | num }}</div>
+        <div class="kpi-sub text-muted">CPM {{ result.summary.avg_cpm | brl }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
+      <div class="card-body py-3">
+        <div class="kpi-label text-muted mb-1">Cliques</div>
+        <div class="kpi-value">{{ result.summary.total_clicks | num }}</div>
+        <div class="kpi-sub text-muted">CTR {{ result.summary.avg_ctr | pct }} &middot; CPC {{ result.summary.avg_cpc | brl }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
+      <div class="card-body py-3">
+        <div class="kpi-label text-muted mb-1">Conversões</div>
+        <div class="kpi-value">{{ result.summary.total_conversions | num }}</div>
+        {% if result.summary.total_conversions > 0 %}
+          <div class="kpi-sub text-muted">CPA {{ result.summary.avg_cpa | brl }}</div>
+        {% else %}
+          <div class="kpi-sub text-danger">Sem conversões</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if result.summary.has_revenue %}
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
+      <div class="card-body py-3">
+        <div class="kpi-label text-muted mb-1">Receita total</div>
+        <div class="kpi-value">{{ result.summary.total_revenue | brl }}</div>
+        <div class="kpi-sub text-muted">ROAS {{ result.summary.avg_roas }}x</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{# ── Best / Worst ─────────────────────────────────────────────────────────── #}
+
+{% if result.summary.best_campaign or result.summary.worst_campaign %}
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
-    <div class="card text-center py-3">
-      <div class="card-body p-2">
-        <div class="text-muted small mb-1">Linhas no CSV</div>
-        <div class="fs-4 fw-bold">{{ total_rows }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center py-3">
-      <div class="card-body p-2">
-        <div class="text-muted small mb-1">Colunas normalizadas</div>
-        <div class="fs-4 fw-bold">{{ columns | length }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center py-3">
-      <div class="card-body p-2">
-        <div class="text-muted small mb-1">Arquivo</div>
-        <div class="fs-6 fw-semibold text-truncate px-1" title="{{ filename }}">
-          {{ filename }}
+  <div class="col-md-6">
+    <div class="card highlight-card best h-100">
+      <div class="card-body py-3 d-flex align-items-center gap-3">
+        <i class="bi bi-graph-up-arrow text-success fs-3"></i>
+        <div>
+          <div class="kpi-label text-muted mb-0">Melhor campanha</div>
+          <div class="fw-semibold">{{ result.summary.best_campaign or "—" }}</div>
+          <div class="kpi-sub text-muted">
+            {% if result.summary.has_revenue %}maior ROAS{% else %}menor CPA{% endif %}
+          </div>
         </div>
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center py-3">
-      <div class="card-body p-2">
-        <div class="text-muted small mb-1">Status</div>
-        <div class="fs-6 fw-semibold text-success">Processado</div>
+  <div class="col-md-6">
+    <div class="card highlight-card worst h-100">
+      <div class="card-body py-3 d-flex align-items-center gap-3">
+        <i class="bi bi-graph-down-arrow text-danger fs-3"></i>
+        <div>
+          <div class="kpi-label text-muted mb-0">Campanha a revisar</div>
+          <div class="fw-semibold">{{ result.summary.worst_campaign or "—" }}</div>
+          <div class="kpi-sub text-muted">menor score de performance</div>
+        </div>
       </div>
     </div>
   </div>
 </div>
+{% endif %}
 
-<!-- Preview table -->
-<div class="card shadow-sm">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <span class="fw-medium">Prévia dos dados — primeiras 5 linhas (schema normalizado)</span>
-    <span class="badge bg-secondary">{{ columns | length }} colunas</span>
+{# ── Alerts ───────────────────────────────────────────────────────────────── #}
+
+{% if result.alerts %}
+<div class="card mb-4 shadow-sm">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+    <span class="fw-medium">Alertas</span>
+    <span class="badge bg-secondary ms-auto">{{ result.alerts | length }}</span>
+  </div>
+  <div class="card-body pb-2">
+    {% for alert in result.alerts %}
+      <div class="alert {% if alert.level == 'critical' %}alert-danger{% else %}alert-warning text-dark{% endif %} py-2 d-flex align-items-start gap-2 mb-2">
+        <i class="bi {% if alert.level == 'critical' %}bi-x-circle-fill{% else %}bi-exclamation-circle-fill{% endif %} mt-1 flex-shrink-0"></i>
+        <div>
+          {{ alert.message }}
+          <span class="badge {% if alert.level == 'critical' %}bg-danger{% else %}bg-warning text-dark{% endif %} ms-2" style="font-size:.65rem">
+            {{ 'Crítico' if alert.level == 'critical' else 'Aviso' }}
+          </span>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Campaigns Table ──────────────────────────────────────────────────────── #}
+
+<div class="card mb-4 shadow-sm">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-bar-chart-line"></i>
+    <span class="fw-medium">Análise por campanha</span>
+    <span class="badge bg-secondary ms-auto">{{ result.campaigns | length }}</span>
   </div>
   <div class="card-body p-0">
-    {% if preview %}
-      <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle">
-          <thead class="table-dark">
-            <tr>
-              {% for col in columns %}
-                <th class="px-3 py-2 text-nowrap">{{ col }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in preview %}
-              <tr>
-                {% for col in columns %}
-                  <td class="px-3 py-2 text-nowrap">
-                    {% set val = row[col] %}
-                    {% if val is none or val == '' %}
-                      <span class="text-muted">—</span>
-                    {% else %}
-                      {{ val }}
-                    {% endif %}
-                  </td>
-                {% endfor %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% if total_rows > 5 %}
-        <div class="px-3 py-2 text-muted small border-top">
-          Exibindo 5 de {{ total_rows }} linhas.
-        </div>
-      {% endif %}
+    {% if result.campaigns %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="ps-3 py-2">Campanha</th>
+            <th class="py-2 text-end">Investido</th>
+            <th class="py-2 text-end">% Budget</th>
+            <th class="py-2 text-end">Cliques</th>
+            <th class="py-2 text-end">CTR</th>
+            <th class="py-2 text-end">CPC</th>
+            <th class="py-2 text-end">Conv.</th>
+            <th class="py-2 text-end">CPA</th>
+            {% if result.summary.has_revenue %}
+            <th class="py-2 text-end">ROAS</th>
+            {% endif %}
+            <th class="py-2" style="min-width:130px">Score</th>
+            <th class="py-2">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in result.campaigns %}
+          <tr>
+            <td class="ps-3 py-2" style="max-width:260px">
+              <div class="fw-medium text-truncate" title="{{ c.campaign_name }}">{{ c.campaign_name }}</div>
+              <div class="diagnosis-text text-muted">{{ c.diagnosis }}</div>
+            </td>
+            <td class="py-2 text-end text-nowrap">{{ c.spend | brl }}</td>
+            <td class="py-2 text-end text-nowrap">
+              <span class="{% if c.spend_pct > 40 %}text-warning{% endif %}">{{ c.spend_pct }}%</span>
+            </td>
+            <td class="py-2 text-end">{{ c.clicks | num }}</td>
+            <td class="py-2 text-end {% if c.ctr < 0.5 %}text-danger{% elif c.ctr >= 2 %}text-success{% endif %}">
+              {{ c.ctr | pct }}
+            </td>
+            <td class="py-2 text-end">{{ c.cpc | brl }}</td>
+            <td class="py-2 text-end">
+              {% if c.conversions == 0 %}
+                <span class="text-muted">0</span>
+              {% else %}
+                {{ c.conversions }}
+              {% endif %}
+            </td>
+            <td class="py-2 text-end text-nowrap">
+              {% if c.cpa > 0 %}{{ c.cpa | brl }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            {% if result.summary.has_revenue %}
+            <td class="py-2 text-end text-nowrap">
+              {% if c.roas > 0 %}
+                <span class="{% if c.roas >= 3 %}text-success{% elif c.roas >= 1 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ c.roas }}x
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            {% endif %}
+            <td class="py-2 pe-3">{{ score_bar(c.score) }}</td>
+            <td class="py-2">{{ status_badge(c.status) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
-      <div class="p-4 text-muted text-center">Nenhum dado encontrado no arquivo.</div>
+    <div class="p-4 text-muted text-center">Nenhuma campanha encontrada.</div>
     {% endif %}
   </div>
 </div>
 
-<!-- Column reference -->
-<div class="card mt-4 shadow-sm">
-  <div class="card-header fw-medium">Schema de colunas normalizadas</div>
-  <div class="card-body">
-    <div class="row g-2">
-      {% set schema_info = [
-        ('campaign_name', 'str', 'Nome da campanha'),
-        ('adset_name',    'str', 'Nome do conjunto / grupo de anúncios'),
-        ('ad_name',       'str', 'Nome do anúncio'),
-        ('impressions',   'int', 'Total de impressões'),
-        ('clicks',        'int', 'Total de cliques'),
-        ('spend',         'float', 'Valor investido (BRL)'),
-        ('conversions',   'int', 'Total de conversões'),
-        ('revenue',       'float', 'Receita gerada (BRL)'),
-        ('ctr',           'float', 'Taxa de cliques (%)'),
-        ('cpc',           'float', 'Custo por clique (BRL)'),
-        ('cpm',           'float', 'Custo por mil impressões (BRL)'),
-        ('cpa',           'float', 'Custo por aquisição (BRL)'),
-        ('roas',          'float', 'Retorno sobre investimento em anúncios'),
-        ('date',          'date',  'Data do registro'),
-      ] %}
-      {% for field, dtype, desc in schema_info %}
-        <div class="col-12 col-md-6">
-          <div class="d-flex gap-2 align-items-start">
-            <code class="text-info text-nowrap">{{ field }}</code>
-            <span class="badge bg-secondary text-nowrap">{{ dtype }}</span>
-            <span class="text-muted small">{{ desc }}</span>
-          </div>
-        </div>
-      {% endfor %}
-    </div>
+{# ── Recommendations ──────────────────────────────────────────────────────── #}
+
+{% if result.recommendations %}
+<div class="card mb-4 shadow-sm">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-lightning-charge-fill text-warning"></i>
+    <span class="fw-medium">Recomendações</span>
+    <span class="badge bg-secondary ms-auto">{{ result.recommendations | length }}</span>
   </div>
+  <div class="card-body">
+    {% for rec in result.recommendations %}
+    <div class="d-flex gap-3 {% if not loop.last %}mb-4 pb-4 border-bottom border-secondary{% endif %}">
+      <div class="rec-number bg-primary text-white flex-shrink-0">{{ rec.priority }}</div>
+      <div class="flex-grow-1">
+        <div class="fw-medium mb-1">{{ rec.action }}</div>
+        <div class="text-muted small mb-1">
+          <i class="bi bi-arrow-up-circle me-1 text-success"></i>{{ rec.impact }}
+        </div>
+        {% if rec.campaign != "geral" %}
+        <div class="small">
+          <span class="text-muted">Campanha:</span>
+          <span class="text-info">{{ rec.campaign }}</span>
+        </div>
+        {% else %}
+        <div class="small text-muted">Conta geral</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Footer info ──────────────────────────────────────────────────────────── #}
+
+<div class="text-muted small text-end mt-2 pb-2">
+  Arquivo: {{ filename }}
 </div>
 
 {% endblock %}

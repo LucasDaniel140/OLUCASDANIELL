@@ -1,8 +1,10 @@
 import os
+from datetime import datetime
 
 from flask import Flask, flash, redirect, render_template, request, url_for
 
 from config import Config
+from modules.analyzer import analyze
 from modules.google_parser import GoogleParser
 from modules.meta_parser import MetaParser
 from modules.utils import allowed_file, generate_unique_filename, platform_label
@@ -13,6 +15,43 @@ app.config.from_object(Config)
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 os.makedirs(app.config["REPORT_FOLDER"], exist_ok=True)
 
+
+# ---------------------------------------------------------------------------
+# Jinja2 filters
+# ---------------------------------------------------------------------------
+
+@app.template_filter("brl")
+def brl_filter(value) -> str:
+    """Format a number as Brazilian currency: R$ 1.234,56"""
+    try:
+        formatted = f"{float(value):,.2f}"          # "1,234.56"
+        formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {formatted}"
+    except (ValueError, TypeError):
+        return "—"
+
+
+@app.template_filter("pct")
+def pct_filter(value) -> str:
+    """Format a number as percentage: 1.23%"""
+    try:
+        return f"{float(value):.2f}%"
+    except (ValueError, TypeError):
+        return "—"
+
+
+@app.template_filter("num")
+def num_filter(value) -> str:
+    """Format an integer with thousands separator: 1.234.567"""
+    try:
+        return f"{int(float(value)):,}".replace(",", ".")
+    except (ValueError, TypeError):
+        return "—"
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 @app.route("/")
 def index():
@@ -58,21 +97,34 @@ def upload():
         flash(f"Erro ao processar o arquivo: {exc}", "danger")
         return redirect(url_for("index"))
 
-    preview_records = df.head(5).to_dict("records")
-    columns = list(df.columns)
+    # ── Analyze ───────────────────────────────────────────────────────────────
+    period = _format_period(date_start, date_end)
+    result = analyze(df, platform, client_name, period)
 
     return render_template(
         "analysis.html",
-        client_name=client_name,
+        result=result,
         platform=platform,
         platform_label=platform_label(platform),
         date_start=date_start,
         date_end=date_end,
         filename=filename,
-        total_rows=len(df),
-        preview=preview_records,
-        columns=columns,
     )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _format_period(date_start: str, date_end: str) -> str:
+    def fmt(d: str) -> str:
+        try:
+            return datetime.strptime(d, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except (ValueError, AttributeError):
+            return d
+
+    parts = [fmt(d) for d in (date_start, date_end) if d]
+    return " → ".join(parts) if parts else "Período não informado"
 
 
 if __name__ == "__main__":
