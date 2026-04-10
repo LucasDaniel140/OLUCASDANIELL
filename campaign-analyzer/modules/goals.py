@@ -11,9 +11,15 @@ Each entry is keyed by the client's normalized slug and contains:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
-_DATA_DIR = Path(__file__).parent.parent / "data"
+_IS_VERCEL = bool(os.environ.get("VERCEL"))
+_DATA_DIR = (
+    Path("/tmp/campaign-analyzer/data")
+    if _IS_VERCEL
+    else Path(__file__).parent.parent / "data"
+)
 _GOALS_FILE = _DATA_DIR / "client_goals.json"
 
 

@@ -20,6 +20,7 @@ app.config.from_object(Config)
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 os.makedirs(app.config["REPORT_FOLDER"], exist_ok=True)
+os.makedirs(app.config["DATA_FOLDER"], exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
