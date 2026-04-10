@@ -296,6 +296,7 @@ def _build_alerts(campaigns: list[dict], summary: dict) -> list[dict]:
         # CTR crítico
         if c["impressions"] > 0 and ctr < 0.5:
             alerts.append({
+                "type": "ctr_critical",
                 "level": "critical",
                 "campaign": name,
                 "message": (
@@ -307,6 +308,7 @@ def _build_alerts(campaigns: list[dict], summary: dict) -> list[dict]:
         # CPA muito acima da média
         if avg_cpa > 0 and cpa > avg_cpa * 2 and conversions > 0:
             alerts.append({
+                "type": "cpa_high",
                 "level": "critical",
                 "campaign": name,
                 "message": (
@@ -319,6 +321,7 @@ def _build_alerts(campaigns: list[dict], summary: dict) -> list[dict]:
         # Alto gasto sem nenhuma conversão
         if spend_pct > 30 and conversions == 0:
             alerts.append({
+                "type": "no_conversion",
                 "level": "warning",
                 "campaign": name,
                 "message": (
@@ -330,6 +333,7 @@ def _build_alerts(campaigns: list[dict], summary: dict) -> list[dict]:
         # ROAS negativo
         if has_revenue and roas > 0 and roas < 1.0:
             alerts.append({
+                "type": "roas_negative",
                 "level": "critical",
                 "campaign": name,
                 "message": (
@@ -341,6 +345,7 @@ def _build_alerts(campaigns: list[dict], summary: dict) -> list[dict]:
         # CTR alto + CPA alto → landing page
         if ctr >= 1.0 and avg_cpa > 0 and cpa > avg_cpa * 1.5 and conversions > 0:
             alerts.append({
+                "type": "landing_page",
                 "level": "warning",
                 "campaign": name,
                 "message": (

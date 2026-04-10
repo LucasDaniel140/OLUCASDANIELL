@@ -13,7 +13,7 @@
       </p>
     </div>
 
-    <div class="card shadow-sm">
+    <div class="card shadow-sm mb-5">
       <div class="card-body p-4">
         <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" novalidate>
 
@@ -73,6 +73,78 @@
         </form>
       </div>
     </div>
+
+    {# ── Report history ──────────────────────────────────────────────────── #}
+
+    {% if reports %}
+    <div class="mb-2 d-flex justify-content-between align-items-center">
+      <h6 class="fw-semibold mb-0 text-muted text-uppercase" style="letter-spacing:.06em;font-size:.75rem">
+        Análises anteriores
+      </h6>
+      <span class="badge bg-secondary">{{ reports | length }}</span>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th class="ps-3 py-2">Cliente</th>
+                <th class="py-2">Plataforma</th>
+                <th class="py-2">Período</th>
+                <th class="py-2 text-center">Camps.</th>
+                <th class="py-2 text-center">Alertas</th>
+                <th class="py-2">Gerado em</th>
+                <th class="py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in reports %}
+              <tr>
+                <td class="ps-3 py-2 fw-medium">{{ r.client }}</td>
+                <td class="py-2">
+                  <span class="badge {% if r.platform == 'meta' %}badge-meta{% else %}badge-google{% endif %}">
+                    {% if r.platform == 'meta' %}Meta Ads{% else %}Google Ads{% endif %}
+                  </span>
+                </td>
+                <td class="py-2 text-muted small">{{ r.period }}</td>
+                <td class="py-2 text-center">{{ r.n_campaigns }}</td>
+                <td class="py-2 text-center">
+                  {% if r.n_critical > 0 %}
+                    <span class="badge bg-danger">{{ r.n_alerts }}</span>
+                  {% elif r.n_alerts > 0 %}
+                    <span class="badge bg-warning text-dark">{{ r.n_alerts }}</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td class="py-2 text-muted small">
+                  {{ r.generated_at | fmtdt if r.generated_at else "—" }}
+                </td>
+                <td class="py-2 pe-3 text-end">
+                  <a
+                    href="{{ url_for('report', analysis_id=r.analysis_id) }}"
+                    target="_blank"
+                    class="btn btn-outline-success btn-sm"
+                    title="Ver relatório para cliente"
+                  >
+                    <i class="bi bi-file-earmark-text"></i>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-4" style="font-size:.875rem">
+      <i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>
+      Nenhuma análise realizada ainda.
+    </div>
+    {% endif %}
 
   </div>
 </div>
