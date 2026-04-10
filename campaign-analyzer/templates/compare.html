@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}Comparação — {{ result.client_a }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .period-pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: .78rem;
+    font-weight: 600;
+  }
+  .period-a { background: #1e3a5f; color: #90c8f7; }
+  .period-b { background: #1a3a2a; color: #6fcf97; }
+  .delta-up-good   { color: #28a745; font-weight: 600; }
+  .delta-up-bad    { color: #dc3545; font-weight: 600; }
+  .delta-down-good { color: #28a745; font-weight: 600; }
+  .delta-down-bad  { color: #dc3545; font-weight: 600; }
+  .metric-label { font-size: .85rem; color: #adb5bd; }
+  .diagnosis-box {
+    background: #1a1d27;
+    border-left: 4px solid #6c757d;
+    padding: 16px 20px;
+    border-radius: 0 6px 6px 0;
+    font-size: .9rem;
+    line-height: 1.75;
+  }
+  .rec-num {
+    width: 1.8rem; height: 1.8rem; min-width: 1.8rem;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: .85rem;
+  }
+  .status-Escalar  { background: rgba(25,135,84,.2);  color: #75b798; }
+  .status-Manter   { background: rgba(13,202,240,.15); color: #6edff6; }
+  .status-Otimizar { background: rgba(255,193,7,.15);  color: #ffda6a; }
+  .status-Pausar   { background: rgba(220,53,69,.2);   color: #ea868f; }
+  .status-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: .75rem; font-weight: 600;
+  }
+  .camp-arrow { font-size: .85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Macros ──────────────────────────────────────────────────────────────── #}
+
+{% macro period_pill(label, period, cls) %}
+  <span class="period-pill {{ cls }}">{{ label }}: {{ period }}</span>
+{% endmacro %}
+
+{% macro status_badge(status) %}
+  <span class="status-badge status-{{ status }}">{{ status }}</span>
+{% endmacro %}
+
+{#
+  delta_cell(delta_pct, higher_is_better)
+  Renders an arrow + percentage with appropriate colour.
+  higher_is_better=True  → positive delta is green, negative is red
+  higher_is_better=False → positive delta is red,   negative is green
+#}
+{% macro delta_cell(delta_pct, higher_is_better) %}
+  {% if delta_pct is none %}
+    <span class="text-muted">—</span>
+  {% elif delta_pct == 0 %}
+    <span class="text-muted fw-semibold">= 0%</span>
+  {% elif delta_pct > 0 %}
+    {% if higher_is_better %}
+      <span class="delta-up-good">&#9650; +{{ delta_pct }}%</span>
+    {% else %}
+      <span class="delta-up-bad">&#9650; +{{ delta_pct }}%</span>
+    {% endif %}
+  {% else %}
+    {% if higher_is_better %}
+      <span class="delta-down-bad">&#9660; {{ delta_pct }}%</span>
+    {% else %}
+      <span class="delta-down-good">&#9660; {{ delta_pct }}%</span>
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
+{% macro fmt_val(value, fmt) %}
+  {% if fmt == 'brl' %}{{ value | brl }}
+  {% elif fmt == 'pct' %}{{ value | pct }}
+  {% elif fmt == 'num' %}{{ value | num }}
+  {% elif fmt == 'x'   %}{{ value }}x
+  {% else %}{{ value }}
+  {% endif %}
+{% endmacro %}
+
+{% macro delta_camp(delta_pct, higher_is_better) %}
+  {% if delta_pct is none %}
+    <span class="text-muted small">—</span>
+  {% elif delta_pct > 0 %}
+    {% if higher_is_better %}
+      <span class="delta-up-good small camp-arrow">▲ +{{ delta_pct }}%</span>
+    {% else %}
+      <span class="delta-up-bad small camp-arrow">▲ +{{ delta_pct }}%</span>
+    {% endif %}
+  {% elif delta_pct < 0 %}
+    {% if higher_is_better %}
+      <span class="delta-down-bad small camp-arrow">▼ {{ delta_pct }}%</span>
+    {% else %}
+      <span class="delta-down-good small camp-arrow">▼ {{ delta_pct }}%</span>
+    {% endif %}
+  {% else %}
+    <span class="text-muted small">= 0%</span>
+  {% endif %}
+{% endmacro %}
+
+{# ── Header ──────────────────────────────────────────────────────────────── #}
+
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="fw-semibold mb-2">
+      {% if result.same_client %}
+        {{ result.client_a }}
+      {% else %}
+        {{ result.client_a }} <span class="text-muted mx-1">vs</span> {{ result.client_b }}
+      {% endif %}
+    </h4>
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      {{ period_pill("Período A", result.period_a, "period-a") }}
+      <span class="text-muted">&#8594;</span>
+      {{ period_pill("Período B", result.period_b, "period-b") }}
+      {% if result.platform_a == result.platform_b %}
+        <span class="badge {% if result.platform_a == 'meta' %}badge-meta{% else %}badge-google{% endif %}">
+          {% if result.platform_a == 'meta' %}Meta Ads{% else %}Google Ads{% endif %}
+        </span>
+      {% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('history') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Histórico
+  </a>
+</div>
+
+{# ── Cross-client warning ─────────────────────────────────────────────────── #}
+{% if not result.same_client %}
+<div class="alert alert-warning d-flex gap-2 align-items-start mb-4">
+  <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+  <div>
+    <strong>Clientes diferentes:</strong>
+    você está comparando análises de <strong>{{ result.client_a }}</strong>
+    (Período A) e <strong>{{ result.client_b }}</strong> (Período B).
+    Os dados podem não ser comparáveis diretamente.
+  </div>
+</div>
+{% endif %}
+
+{# ── Summary comparison table ─────────────────────────────────────────────── #}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-table"></i>
+    <span class="fw-medium">Comparação de Métricas</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="ps-3 py-2">Métrica</th>
+            <th class="py-2 text-end">
+              <span class="period-pill period-a">Período A</span>
+              <div class="text-muted small fw-normal mt-1">{{ result.period_a }}</div>
+            </th>
+            <th class="py-2 text-end">
+              <span class="period-pill period-b">Período B</span>
+              <div class="text-muted small fw-normal mt-1">{{ result.period_b }}</div>
+            </th>
+            <th class="py-2 text-end pe-3">Variação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in result.summary_rows %}
+          <tr>
+            <td class="ps-3 py-2 metric-label">{{ row.label }}</td>
+            <td class="py-2 text-end">{{ fmt_val(row.value_a, row.fmt) }}</td>
+            <td class="py-2 text-end fw-medium">{{ fmt_val(row.value_b, row.fmt) }}</td>
+            <td class="py-2 text-end pe-3">
+              {{ delta_cell(row.delta_pct, row.higher_is_better) }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Campaign comparison ───────────────────────────────────────────────────── #}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-bar-chart-line"></i>
+    <span class="fw-medium">Comparação por Campanha</span>
+    {% if result.camps_both %}
+      <span class="badge bg-secondary ms-auto">{{ result.camps_both | length }} em comum</span>
+    {% endif %}
+  </div>
+
+  {% if result.camps_both %}
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="ps-3 py-2">Campanha</th>
+            <th class="py-2 text-end">
+              <span class="period-pill period-a" style="font-size:.68rem">A</span> CPA
+            </th>
+            <th class="py-2 text-end">
+              <span class="period-pill period-b" style="font-size:.68rem">B</span> CPA
+            </th>
+            <th class="py-2 text-end">&Delta; CPA</th>
+            <th class="py-2 text-end">
+              <span class="period-pill period-a" style="font-size:.68rem">A</span> CTR
+            </th>
+            <th class="py-2 text-end">
+              <span class="period-pill period-b" style="font-size:.68rem">B</span> CTR
+            </th>
+            <th class="py-2 text-end">&Delta; CTR</th>
+            <th class="py-2 text-center">Status A</th>
+            <th class="py-2 text-center pe-3">Status B</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in result.camps_both %}
+          <tr>
+            <td class="ps-3 py-2 fw-medium small" style="max-width:200px">
+              <span class="text-truncate d-block" title="{{ c.campaign_name }}">{{ c.campaign_name }}</span>
+            </td>
+            <td class="py-2 text-end small">{{ c.cpa_a | brl if c.cpa_a > 0 else '—' }}</td>
+            <td class="py-2 text-end small fw-medium">{{ c.cpa_b | brl if c.cpa_b > 0 else '—' }}</td>
+            <td class="py-2 text-end">{{ delta_camp(c.delta_cpa, false) }}</td>
+            <td class="py-2 text-end small">{{ c.ctr_a | pct }}</td>
+            <td class="py-2 text-end small fw-medium">{{ c.ctr_b | pct }}</td>
+            <td class="py-2 text-end">{{ delta_camp(c.delta_ctr, true) }}</td>
+            <td class="py-2 text-center">{{ status_badge(c.status_a) }}</td>
+            <td class="py-2 text-center pe-3">{{ status_badge(c.status_b) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card-body text-muted text-center py-4">
+    Nenhuma campanha em comum nos dois períodos.
+  </div>
+  {% endif %}
+</div>
+
+{# ── New / discontinued campaigns ─────────────────────────────────────────── #}
+{% if result.camps_only_b or result.camps_only_a %}
+<div class="row g-3 mb-4">
+
+  {% if result.camps_only_b %}
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-plus-circle text-success"></i>
+        <span class="fw-medium">Novas no Período B</span>
+        <span class="badge bg-success ms-auto">{{ result.camps_only_b | length }}</span>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th class="ps-3 py-2">Campanha</th>
+              <th class="py-2 text-end">Investido</th>
+              <th class="py-2 text-end pe-3">CTR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in result.camps_only_b %}
+            <tr>
+              <td class="ps-3 py-2 small fw-medium">
+                <span class="text-truncate d-block" style="max-width:160px" title="{{ c.campaign_name }}">
+                  {{ c.campaign_name }}
+                </span>
+              </td>
+              <td class="py-2 text-end small">{{ c.spend | brl }}</td>
+              <td class="py-2 text-end pe-3 small">{{ c.ctr | pct }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if result.camps_only_a %}
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-dash-circle text-danger"></i>
+        <span class="fw-medium">Encerradas (só no Período A)</span>
+        <span class="badge bg-danger ms-auto">{{ result.camps_only_a | length }}</span>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th class="ps-3 py-2">Campanha</th>
+              <th class="py-2 text-end">Investido</th>
+              <th class="py-2 text-end pe-3">CTR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in result.camps_only_a %}
+            <tr>
+              <td class="ps-3 py-2 small fw-medium">
+                <span class="text-truncate d-block" style="max-width:160px" title="{{ c.campaign_name }}">
+                  {{ c.campaign_name }}
+                </span>
+              </td>
+              <td class="py-2 text-end small">{{ c.spend | brl }}</td>
+              <td class="py-2 text-end pe-3 small">{{ c.ctr | pct }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+{# ── Comparative diagnosis ─────────────────────────────────────────────────── #}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-chat-square-text"></i>
+    <span class="fw-medium">Diagnóstico Comparativo</span>
+  </div>
+  <div class="card-body">
+    <div class="diagnosis-box">{{ result.diagnosis }}</div>
+  </div>
+</div>
+
+{# ── Comparative recommendations ──────────────────────────────────────────── #}
+{% if result.recommendations %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-lightning-charge-fill text-warning"></i>
+    <span class="fw-medium">Recomendações para o Próximo Período</span>
+    <span class="badge bg-secondary ms-auto">{{ result.recommendations | length }}</span>
+  </div>
+  <div class="card-body">
+    {% for rec in result.recommendations %}
+    <div class="d-flex gap-3 {% if not loop.last %}mb-4 pb-4 border-bottom border-secondary{% endif %}">
+      <div class="rec-num bg-primary text-white flex-shrink-0">{{ loop.index }}</div>
+      <div>
+        <div class="fw-medium mb-1">{{ rec.action }}</div>
+        <div class="text-muted small">
+          <i class="bi bi-arrow-up-circle me-1 text-success"></i>{{ rec.impact }}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

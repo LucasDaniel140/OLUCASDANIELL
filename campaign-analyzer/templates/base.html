@@ -32,8 +32,11 @@
     <a class="navbar-brand" href="{{ url_for('index') }}">
       &#9650; Campaign Analyzer
     </a>
-    <div class="navbar-nav ms-auto">
-      <a class="nav-link" href="{{ url_for('index') }}">Nova análise</a>
+    <div class="navbar-nav ms-auto d-flex flex-row gap-1">
+      <a class="nav-link px-3 {% if request.endpoint == 'index' %}active{% endif %}"
+         href="{{ url_for('index') }}">Nova análise</a>
+      <a class="nav-link px-3 {% if request.endpoint == 'history' %}active{% endif %}"
+         href="{{ url_for('history') }}">Histórico</a>
     </div>
   </div>
 </nav>

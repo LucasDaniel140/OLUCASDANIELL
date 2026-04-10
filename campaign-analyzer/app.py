@@ -1,12 +1,14 @@
 import json
 import os
 import re
+from collections import defaultdict
 from datetime import datetime
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request, url_for
 
 from config import Config
 from modules.analyzer import analyze
+from modules.comparator import compare as compare_analyses
 from modules.google_parser import GoogleParser
 from modules.meta_parser import MetaParser
 from modules.report_builder import build_report
@@ -25,7 +27,6 @@ os.makedirs(app.config["REPORT_FOLDER"], exist_ok=True)
 
 @app.template_filter("brl")
 def brl_filter(value) -> str:
-    """Format a number as Brazilian currency: R$ 1.234,56"""
     try:
         f = f"{float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         return f"R$ {f}"
@@ -35,7 +36,6 @@ def brl_filter(value) -> str:
 
 @app.template_filter("pct")
 def pct_filter(value) -> str:
-    """Format a number as percentage: 1.23%"""
     try:
         return f"{float(value):.2f}%"
     except (ValueError, TypeError):
@@ -44,7 +44,6 @@ def pct_filter(value) -> str:
 
 @app.template_filter("num")
 def num_filter(value) -> str:
-    """Format an integer with thousands separator: 1.234.567"""
     try:
         return f"{int(float(value)):,}".replace(",", ".")
     except (ValueError, TypeError):
@@ -53,9 +52,16 @@ def num_filter(value) -> str:
 
 @app.template_filter("fmtdt")
 def fmtdt_filter(iso_str) -> str:
-    """Format ISO datetime string for display."""
     try:
         return datetime.fromisoformat(str(iso_str)).strftime("%d/%m/%Y %H:%M")
+    except (ValueError, TypeError, AttributeError):
+        return str(iso_str)
+
+
+@app.template_filter("fmtdate")
+def fmtdate_filter(iso_str) -> str:
+    try:
+        return datetime.fromisoformat(str(iso_str)).strftime("%d/%m/%Y")
     except (ValueError, TypeError, AttributeError):
         return str(iso_str)
 
@@ -70,9 +76,15 @@ def index():
     return render_template("index.html", reports=reports)
 
 
+@app.route("/history")
+def history():
+    reports = _list_reports()
+    groups  = _group_by_client(reports)
+    return render_template("history.html", groups=groups, total=len(reports))
+
+
 @app.route("/upload", methods=["POST"])
 def upload():
-    # ── Validate form fields ──────────────────────────────────────────────────
     client_name = request.form.get("client_name", "").strip()
     platform    = request.form.get("platform", "").strip()
     date_start  = request.form.get("date_start", "").strip()
@@ -96,12 +108,10 @@ def upload():
         flash("Apenas arquivos .csv são aceitos.", "danger")
         return redirect(url_for("index"))
 
-    # ── Save CSV ──────────────────────────────────────────────────────────────
     filename = generate_unique_filename(client_name, file.filename)
     filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
     file.save(filepath)
 
-    # ── Parse ─────────────────────────────────────────────────────────────────
     try:
         parser = MetaParser(filepath) if platform == "meta" else GoogleParser(filepath)
         df = parser.parse()
@@ -109,12 +119,10 @@ def upload():
         flash(f"Erro ao processar o arquivo: {exc}", "danger")
         return redirect(url_for("index"))
 
-    # ── Analyze ───────────────────────────────────────────────────────────────
     period = _format_period(date_start, date_end)
     result = analyze(df, platform, client_name, period)
 
-    # ── Persist analysis ──────────────────────────────────────────────────────
-    analysis_id = _make_analysis_id(client_name)
+    analysis_id            = _make_analysis_id(client_name)
     result["generated_at"] = datetime.now().isoformat()
     result["analysis_id"]  = analysis_id
     _save_analysis(result, analysis_id)
@@ -133,17 +141,46 @@ def upload():
 
 @app.route("/report/<analysis_id>")
 def report(analysis_id):
-    # Sanitize to prevent path traversal
     if not re.match(r"^[A-Za-z0-9_-]+$", analysis_id):
         abort(404)
-
     data = _load_analysis(analysis_id)
     if data is None:
         flash("Relatório não encontrado.", "danger")
         return redirect(url_for("index"))
+    return Response(build_report(data), content_type="text/html; charset=utf-8")
 
-    html = build_report(data)
-    return Response(html, content_type="text/html; charset=utf-8")
+
+@app.route("/compare")
+def compare():
+    id_a = request.args.get("a", "").strip()
+    id_b = request.args.get("b", "").strip()
+
+    if not id_a or not id_b:
+        flash("Selecione exatamente 2 análises para comparar.", "warning")
+        return redirect(url_for("history"))
+
+    if not re.match(r"^[A-Za-z0-9_-]+$", id_a) or not re.match(r"^[A-Za-z0-9_-]+$", id_b):
+        abort(404)
+
+    if id_a == id_b:
+        flash("Selecione duas análises diferentes.", "warning")
+        return redirect(url_for("history"))
+
+    data_a = _load_analysis(id_a)
+    data_b = _load_analysis(id_b)
+
+    if data_a is None or data_b is None:
+        flash("Uma ou mais análises não foram encontradas.", "danger")
+        return redirect(url_for("history"))
+
+    result = compare_analyses(data_a, data_b)
+
+    return render_template(
+        "compare.html",
+        result=result,
+        id_a=id_a,
+        id_b=id_b,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -151,8 +188,8 @@ def report(analysis_id):
 # ---------------------------------------------------------------------------
 
 def _make_analysis_id(client_name: str) -> str:
-    timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name  = re.sub(r"[^a-zA-Z0-9]", "_", client_name).lower().strip("_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = re.sub(r"[^a-zA-Z0-9]", "_", client_name).lower().strip("_")
     return f"{timestamp}_{safe_name}"
 
 
@@ -188,23 +225,42 @@ def _list_reports() -> list[dict]:
         try:
             with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
-            n_critical = sum(
-                1 for a in data.get("alerts", []) if a.get("level") == "critical"
-            )
+            summary    = data.get("summary", {})
+            n_critical = sum(1 for a in data.get("alerts", []) if a.get("level") == "critical")
             entries.append({
-                "analysis_id":  analysis_id,
-                "client":       data.get("client", "—"),
-                "platform":     data.get("platform", "—"),
-                "period":       data.get("period", "—"),
-                "generated_at": data.get("generated_at", ""),
-                "n_campaigns":  len(data.get("campaigns", [])),
-                "n_alerts":     len(data.get("alerts", [])),
-                "n_critical":   n_critical,
+                "analysis_id":      analysis_id,
+                "client":           data.get("client", "—"),
+                "platform":         data.get("platform", "—"),
+                "period":           data.get("period", "—"),
+                "generated_at":     data.get("generated_at", ""),
+                "n_campaigns":      len(data.get("campaigns", [])),
+                "n_alerts":         len(data.get("alerts", [])),
+                "n_critical":       n_critical,
+                "total_spend":      summary.get("total_spend", 0),
+                "total_conversions": summary.get("total_conversions", 0),
+                "avg_cpa":          summary.get("avg_cpa", 0),
+                "avg_ctr":          summary.get("avg_ctr", 0),
             })
         except Exception:
             continue
 
     return entries
+
+
+def _group_by_client(reports: list) -> list[dict]:
+    """Group report metadata by client, each group sorted newest-first."""
+    bucket: dict[str, list] = defaultdict(list)
+    for r in reports:
+        bucket[r["client"]].append(r)
+
+    groups = []
+    for client, analyses in bucket.items():
+        analyses.sort(key=lambda r: r.get("generated_at", ""), reverse=True)
+        groups.append({"client": client, "analyses": analyses})
+
+    # Sort groups by most recent analysis descending
+    groups.sort(key=lambda g: g["analyses"][0].get("generated_at", ""), reverse=True)
+    return groups
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Histórico de Análises{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Extra bottom padding so fixed bar doesn't overlap content */
+  main { padding-bottom: 80px !important; }
+
+  .compare-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: #12141f;
+    border-top: 1px solid #2a2d3a;
+    z-index: 1040;
+  }
+  .accordion-button { background-color: #1a1d27; color: #fff; }
+  .accordion-button:not(.collapsed) { background-color: #1e2235; color: #fff; box-shadow: none; }
+  .accordion-button::after { filter: invert(1); }
+  .accordion-item { background-color: #1a1d27; border-color: #2a2d3a; }
+  .client-count { font-size: .72rem; opacity: .75; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Page header ─────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-semibold mb-1">Histórico de Análises</h4>
+    <p class="text-muted mb-0">
+      {{ total }} análise{{ 's' if total != 1 }} salva{{ 's' if total != 1 }}
+      &middot; {{ groups | length }} cliente{{ 's' if groups | length != 1 }}
+    </p>
+  </div>
+  <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Nova análise
+  </a>
+</div>
+
+{% if not groups %}
+{# ── Empty state ──────────────────────────────────────────────────────────── #}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>
+  <p class="mb-1">Nenhuma análise encontrada.</p>
+  <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm mt-2">Fazer primeira análise</a>
+</div>
+
+{% else %}
+{# ── Selection hint ───────────────────────────────────────────────────────── #}
+<div class="alert alert-secondary py-2 small mb-3">
+  <i class="bi bi-info-circle me-1"></i>
+  Marque exatamente <strong>2 análises</strong> (de qualquer cliente) para compará-las lado a lado.
+</div>
+
+{# ── Accordion by client ──────────────────────────────────────────────────── #}
+<div class="accordion" id="historyAccordion">
+  {% for group in groups %}
+  {% set group_idx = loop.index %}
+  {% set single = group.analyses | length == 1 %}
+
+  <div class="accordion-item border mb-2 rounded overflow-hidden">
+    <h2 class="accordion-header">
+      <button
+        class="accordion-button {% if not loop.first %}collapsed{% endif %} fw-semibold"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#group{{ group_idx }}"
+        aria-expanded="{{ 'true' if loop.first else 'false' }}"
+      >
+        <i class="bi bi-person-circle me-2 opacity-75"></i>
+        {{ group.client }}
+        <span class="badge bg-secondary ms-2 client-count fw-normal">
+          {{ group.analyses | length }} análise{{ 's' if group.analyses | length != 1 }}
+        </span>
+        {% if single %}
+        <span class="badge bg-dark text-muted ms-2 client-count fw-normal border border-secondary">
+          <i class="bi bi-lock-fill me-1"></i>mín. 2 para comparar
+        </span>
+        {% endif %}
+      </button>
+    </h2>
+
+    <div
+      id="group{{ group_idx }}"
+      class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
+    >
+      <div class="accordion-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th class="ps-3 py-2" style="width:40px">
+                  <i class="bi bi-check2-square opacity-50" title="Selecionar para comparar"></i>
+                </th>
+                <th class="py-2">Data da análise</th>
+                <th class="py-2">Plataforma</th>
+                <th class="py-2">Período</th>
+                <th class="py-2 text-end">Investido</th>
+                <th class="py-2 text-end">Conv.</th>
+                <th class="py-2 text-end">CPA</th>
+                <th class="py-2 text-end">CTR</th>
+                <th class="py-2 text-center">Camps.</th>
+                <th class="py-2 text-center">Alertas</th>
+                <th class="py-2 pe-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in group.analyses %}
+              <tr>
+                <td class="ps-3">
+                  <input
+                    type="checkbox"
+                    name="analysis"
+                    value="{{ r.analysis_id }}"
+                    class="form-check-input compare-check"
+                    {% if single %}
+                      disabled
+                      title="É necessário ao menos 2 análises para comparar"
+                      data-bs-toggle="tooltip"
+                    {% endif %}
+                  />
+                </td>
+                <td class="py-2 small text-muted">
+                  {{ r.generated_at | fmtdt if r.generated_at else "—" }}
+                </td>
+                <td class="py-2">
+                  <span class="badge {% if r.platform == 'meta' %}badge-meta{% else %}badge-google{% endif %}">
+                    {% if r.platform == 'meta' %}Meta Ads{% else %}Google Ads{% endif %}
+                  </span>
+                </td>
+                <td class="py-2 small">{{ r.period }}</td>
+                <td class="py-2 text-end small fw-medium">{{ r.total_spend | brl }}</td>
+                <td class="py-2 text-end small">{{ r.total_conversions | num }}</td>
+                <td class="py-2 text-end small">
+                  {% if r.avg_cpa > 0 %}{{ r.avg_cpa | brl }}{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="py-2 text-end small">{{ r.avg_ctr | pct }}</td>
+                <td class="py-2 text-center small">{{ r.n_campaigns }}</td>
+                <td class="py-2 text-center">
+                  {% if r.n_critical > 0 %}
+                    <span class="badge bg-danger">{{ r.n_alerts }}</span>
+                  {% elif r.n_alerts > 0 %}
+                    <span class="badge bg-warning text-dark">{{ r.n_alerts }}</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td class="py-2 pe-3 text-end">
+                  <a
+                    href="{{ url_for('report', analysis_id=r.analysis_id) }}"
+                    target="_blank"
+                    class="btn btn-outline-success btn-sm"
+                    title="Ver relatório para cliente"
+                  >
+                    <i class="bi bi-file-earmark-text"></i>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Fixed compare bar ────────────────────────────────────────────────────── #}
+<div class="compare-bar d-flex align-items-center justify-content-between px-4 py-2">
+  <span class="text-muted small" id="compareStatus">
+    Selecione 2 análises para comparar
+  </span>
+  <a id="compareBtn" href="#" class="btn btn-secondary btn-sm disabled fw-semibold">
+    <i class="bi bi-arrow-left-right me-1"></i>Comparar selecionados
+  </a>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  const checks  = document.querySelectorAll('.compare-check');
+  const btn     = document.getElementById('compareBtn');
+  const status  = document.getElementById('compareStatus');
+
+  function refresh() {
+    const selected = [...document.querySelectorAll('.compare-check:checked')];
+    const n = selected.length;
+
+    if (n === 0) {
+      status.textContent = 'Selecione 2 análises para comparar';
+    } else if (n === 1) {
+      status.textContent = '1 de 2 selecionada — escolha mais uma';
+    } else if (n === 2) {
+      status.textContent = '2 análises selecionadas';
+    }
+
+    if (n === 2) {
+      const [a, b] = selected.map(c => c.value);
+      btn.href = `/compare?a=${a}&b=${b}`;
+      btn.classList.remove('disabled', 'btn-secondary');
+      btn.classList.add('btn-success');
+    } else {
+      btn.href = '#';
+      btn.classList.add('disabled', 'btn-secondary');
+      btn.classList.remove('btn-success');
+    }
+  }
+
+  checks.forEach(cb => {
+    cb.addEventListener('change', function () {
+      const selected = document.querySelectorAll('.compare-check:checked');
+      // Enforce max 2
+      if (selected.length > 2) {
+        this.checked = false;
+      }
+      refresh();
+    });
+  });
+
+  // Activate Bootstrap tooltips
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+    new bootstrap.Tooltip(el);
+  });
+})();
+</script>
+{% endblock %}
