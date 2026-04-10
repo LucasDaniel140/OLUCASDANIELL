@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Análise — {{ client_name }}{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="fw-semibold mb-1">{{ client_name }}</h4>
+    <p class="text-muted mb-0">
+      <span class="badge
+        {% if platform == 'meta' %}badge-meta{% else %}badge-google{% endif %}
+        me-2">
+        {{ platform_label }}
+      </span>
+      {% if date_start and date_end %}
+        {{ date_start }} &rarr; {{ date_end }}
+      {% elif date_start %}
+        A partir de {{ date_start }}
+      {% elif date_end %}
+        Até {{ date_end }}
+      {% else %}
+        Período não informado
+      {% endif %}
+    </p>
+  </div>
+  <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+    &larr; Nova análise
+  </a>
+</div>
+
+<!-- Summary cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center py-3">
+      <div class="card-body p-2">
+        <div class="text-muted small mb-1">Linhas no CSV</div>
+        <div class="fs-4 fw-bold">{{ total_rows }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center py-3">
+      <div class="card-body p-2">
+        <div class="text-muted small mb-1">Colunas normalizadas</div>
+        <div class="fs-4 fw-bold">{{ columns | length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center py-3">
+      <div class="card-body p-2">
+        <div class="text-muted small mb-1">Arquivo</div>
+        <div class="fs-6 fw-semibold text-truncate px-1" title="{{ filename }}">
+          {{ filename }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center py-3">
+      <div class="card-body p-2">
+        <div class="text-muted small mb-1">Status</div>
+        <div class="fs-6 fw-semibold text-success">Processado</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preview table -->
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-medium">Prévia dos dados — primeiras 5 linhas (schema normalizado)</span>
+    <span class="badge bg-secondary">{{ columns | length }} colunas</span>
+  </div>
+  <div class="card-body p-0">
+    {% if preview %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-dark">
+            <tr>
+              {% for col in columns %}
+                <th class="px-3 py-2 text-nowrap">{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in preview %}
+              <tr>
+                {% for col in columns %}
+                  <td class="px-3 py-2 text-nowrap">
+                    {% set val = row[col] %}
+                    {% if val is none or val == '' %}
+                      <span class="text-muted">—</span>
+                    {% else %}
+                      {{ val }}
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if total_rows > 5 %}
+        <div class="px-3 py-2 text-muted small border-top">
+          Exibindo 5 de {{ total_rows }} linhas.
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="p-4 text-muted text-center">Nenhum dado encontrado no arquivo.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Column reference -->
+<div class="card mt-4 shadow-sm">
+  <div class="card-header fw-medium">Schema de colunas normalizadas</div>
+  <div class="card-body">
+    <div class="row g-2">
+      {% set schema_info = [
+        ('campaign_name', 'str', 'Nome da campanha'),
+        ('adset_name',    'str', 'Nome do conjunto / grupo de anúncios'),
+        ('ad_name',       'str', 'Nome do anúncio'),
+        ('impressions',   'int', 'Total de impressões'),
+        ('clicks',        'int', 'Total de cliques'),
+        ('spend',         'float', 'Valor investido (BRL)'),
+        ('conversions',   'int', 'Total de conversões'),
+        ('revenue',       'float', 'Receita gerada (BRL)'),
+        ('ctr',           'float', 'Taxa de cliques (%)'),
+        ('cpc',           'float', 'Custo por clique (BRL)'),
+        ('cpm',           'float', 'Custo por mil impressões (BRL)'),
+        ('cpa',           'float', 'Custo por aquisição (BRL)'),
+        ('roas',          'float', 'Retorno sobre investimento em anúncios'),
+        ('date',          'date',  'Data do registro'),
+      ] %}
+      {% for field, dtype, desc in schema_info %}
+        <div class="col-12 col-md-6">
+          <div class="d-flex gap-2 align-items-start">
+            <code class="text-info text-nowrap">{{ field }}</code>
+            <span class="badge bg-secondary text-nowrap">{{ dtype }}</span>
+            <span class="text-muted small">{{ desc }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

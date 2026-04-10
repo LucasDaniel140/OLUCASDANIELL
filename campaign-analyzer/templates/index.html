@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Campaign Analyzer — Upload{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7 col-md-9">
+
+    <div class="mb-4">
+      <h4 class="fw-semibold mb-1">Nova análise</h4>
+      <p class="text-muted mb-0">
+        Faça o upload de um CSV exportado do Meta Ads ou Google Ads para gerar o diagnóstico de performance.
+      </p>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" novalidate>
+
+          <!-- Cliente -->
+          <div class="mb-3">
+            <label for="client_name" class="form-label fw-medium">Nome do cliente</label>
+            <input
+              type="text"
+              class="form-control"
+              id="client_name"
+              name="client_name"
+              placeholder="Ex: Loja XYZ"
+              required
+            />
+          </div>
+
+          <!-- Plataforma -->
+          <div class="mb-3">
+            <label for="platform" class="form-label fw-medium">Plataforma</label>
+            <select class="form-select" id="platform" name="platform" required>
+              <option value="" disabled selected>Selecione…</option>
+              <option value="meta">Meta Ads</option>
+              <option value="google">Google Ads</option>
+            </select>
+          </div>
+
+          <!-- Período -->
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label for="date_start" class="form-label fw-medium">Data início</label>
+              <input type="date" class="form-control" id="date_start" name="date_start" />
+            </div>
+            <div class="col-6">
+              <label for="date_end" class="form-label fw-medium">Data fim</label>
+              <input type="date" class="form-control" id="date_end" name="date_end" />
+            </div>
+          </div>
+
+          <!-- Arquivo -->
+          <div class="mb-4">
+            <label for="csv_file" class="form-label fw-medium">Arquivo CSV</label>
+            <input
+              class="form-control"
+              type="file"
+              id="csv_file"
+              name="csv_file"
+              accept=".csv"
+              required
+            />
+            <div class="form-text">Tamanho máximo: 10 MB. Apenas arquivos .csv.</div>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100 fw-semibold">
+            Analisar campanha
+          </button>
+
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
