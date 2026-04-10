@@ -37,6 +37,8 @@
          href="{{ url_for('index') }}">Nova análise</a>
       <a class="nav-link px-3 {% if request.endpoint == 'history' %}active{% endif %}"
          href="{{ url_for('history') }}">Histórico</a>
+      <a class="nav-link px-3 {% if request.endpoint in ('goals', 'goals_form') %}active{% endif %}"
+         href="{{ url_for('goals') }}">Metas</a>
     </div>
   </div>
 </nav>

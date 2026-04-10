@@ -1,5 +1,14 @@
 import re
+import unicodedata
 from datetime import datetime
+
+
+def normalize_slug(name: str) -> str:
+    """Convert a client name to a URL-safe slug (lowercase, hyphens, no accents)."""
+    normalized = unicodedata.normalize("NFD", name)
+    ascii_str = normalized.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_str).lower().strip("-")
+    return slug or "cliente"
 
 
 def allowed_file(filename: str, allowed_extensions: set = None) -> bool:

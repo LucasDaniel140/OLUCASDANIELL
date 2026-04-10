@@ -44,6 +44,10 @@ _ALERT_TRANSLATIONS = {
         'A campanha "{camp}" apresenta boa atração de cliques, mas baixa taxa de conversão — '
         "recomendamos revisão da página de destino e da oferta."
     ),
+    "budget_overspend": (
+        "O investimento do período ultrapassou o orçamento mensal definido — "
+        "recomenda-se revisão dos limites de campanha."
+    ),
 }
 
 # Simple text replacements to strip internal jargon from recommendations
@@ -276,6 +280,7 @@ def build_report(analysis: dict) -> str:
     campaigns       = analysis.get("campaigns", [])
     alerts          = analysis.get("alerts", [])[:3]
     recommendations = analysis.get("recommendations", [])
+    goal_comparison = analysis.get("goal_comparison") or []
     client          = analysis.get("client", "")
     platform        = analysis.get("platform", "")
     period          = analysis.get("period", "—")
@@ -295,6 +300,7 @@ def build_report(analysis: dict) -> str:
         '<div class="container">',
         _header(client, platform_label, period, generated_at),
         _section_executive(summary, campaigns, analysis),
+        _section_goals(goal_comparison),
         _section_campaigns(campaigns, summary),
         _section_alerts(alerts),
         _section_steps(recommendations),
@@ -485,6 +491,72 @@ def _section_alerts(alerts: list) -> str:
         '<section class="section">'
         '  <div class="section-title">Pontos de Aten&ccedil;&atilde;o</div>'
         f"  {items}"
+        "</section>"
+    )
+
+
+def _section_goals(goal_comparison: list) -> str:
+    if not goal_comparison:
+        return ""
+
+    _STATUS_LABEL = {
+        "atingida":     "&#10003; Meta atingida",
+        "próxima":      "&#126; Dentro da margem",
+        "não atingida": "&#10007; Abaixo da meta",
+    }
+    _STATUS_STYLE = {
+        "atingida":     "background:#d4edda;color:#155724",
+        "próxima":      "background:#fff3cd;color:#856404",
+        "não atingida": "background:#f8d7da;color:#721c24",
+    }
+
+    rows = []
+    for g in goal_comparison:
+        status     = g.get("status", "")
+        label_txt  = _STATUS_LABEL.get(status, status)
+        style      = _STATUS_STYLE.get(status, "background:#f8f9fa;color:#333")
+        fmt        = g.get("fmt", "")
+        target_val = g.get("target", 0)
+        actual_val = g.get("actual", 0)
+
+        if fmt == "brl":
+            target_str = _brl(target_val)
+            actual_str = _brl(actual_val)
+        elif fmt == "pct":
+            target_str = _pct(target_val)
+            actual_str = _pct(actual_val)
+        elif fmt == "x":
+            target_str = f"{float(target_val):.2f}x"
+            actual_str = f"{float(actual_val):.2f}x"
+        else:
+            target_str = str(target_val)
+            actual_str = str(actual_val)
+
+        rows.append(
+            "<tr>"
+            f"<td>{_e(g.get('label', ''))}</td>"
+            f"<td style='text-align:right'>{target_str}</td>"
+            f"<td style='text-align:right;font-weight:600'>{actual_str}</td>"
+            f"<td style='text-align:center'>"
+            f"<span style='display:inline-block;padding:2px 8px;border-radius:4px;"
+            f"font-size:11px;font-weight:700;{style}'>{label_txt}</span>"
+            f"</td>"
+            "</tr>"
+        )
+
+    rows_html = "\n".join(rows)
+    return (
+        '<section class="section">'
+        '  <div class="section-title">Metas do Per&iacute;odo</div>'
+        '  <table class="camp-table">'
+        "    <thead><tr>"
+        "      <th style='text-align:left'>M&eacute;trica</th>"
+        "      <th>Meta</th>"
+        "      <th>Realizado</th>"
+        "      <th>Situa&ccedil;&atilde;o</th>"
+        "    </tr></thead>"
+        f"    <tbody>{rows_html}</tbody>"
+        "  </table>"
         "</section>"
     )
 

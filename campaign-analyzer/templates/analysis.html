@@ -64,13 +64,19 @@
       <span class="text-muted">{{ result.campaigns | length }} campanha{{ 's' if result.campaigns | length != 1 }}</span>
     </p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <a
       href="{{ url_for('report', analysis_id=analysis_id) }}"
       target="_blank"
       class="btn btn-success btn-sm fw-semibold"
     >
-      <i class="bi bi-file-earmark-text me-1"></i>Relatório para cliente
+      <i class="bi bi-file-earmark-text me-1"></i>Ver Relatório
+    </a>
+    <a
+      href="{{ url_for('report_pdf', analysis_id=analysis_id) }}"
+      class="btn btn-outline-success btn-sm fw-semibold"
+    >
+      <i class="bi bi-file-earmark-pdf me-1"></i>Baixar PDF
     </a>
     <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left me-1"></i>Nova análise
@@ -138,6 +144,71 @@
   {% endif %}
 
 </div>
+
+{# ── Goals ───────────────────────────────────────────────────────────────── #}
+
+{% if result.goal_comparison %}
+<div class="card mb-4 shadow-sm">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-bullseye text-success"></i>
+    <span class="fw-medium">Metas do Período</span>
+    <span class="badge bg-secondary ms-auto">{{ result.goal_comparison | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="ps-3 py-2">Métrica</th>
+            <th class="py-2 text-end">Meta</th>
+            <th class="py-2 text-end">Realizado</th>
+            <th class="py-2 text-center pe-3">Situação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in result.goal_comparison %}
+          <tr>
+            <td class="ps-3 py-2 fw-medium">{{ g.label }}</td>
+            <td class="py-2 text-end text-muted small">
+              {% if g.fmt == 'brl' %}{{ g.target | brl }}
+              {% elif g.fmt == 'pct' %}{{ g.target | pct }}
+              {% elif g.fmt == 'x' %}{{ g.target }}x
+              {% else %}{{ g.target }}{% endif %}
+            </td>
+            <td class="py-2 text-end fw-medium small">
+              {% if g.fmt == 'brl' %}{{ g.actual | brl }}
+              {% elif g.fmt == 'pct' %}{{ g.actual | pct }}
+              {% elif g.fmt == 'x' %}{{ g.actual }}x
+              {% else %}{{ g.actual }}{% endif %}
+            </td>
+            <td class="py-2 text-center pe-3">
+              {% if g.status == 'atingida' %}
+                <span class="badge bg-success">&#10003; Meta atingida</span>
+              {% elif g.status == 'próxima' %}
+                <span class="badge bg-warning text-dark">&#126; Dentro da margem</span>
+              {% else %}
+                <span class="badge bg-danger">&#10007; Abaixo da meta</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mb-4 shadow-sm" style="border-style:dashed;border-color:#2a2d3a">
+  <div class="card-body text-center py-3">
+    <i class="bi bi-bullseye text-muted me-2"></i>
+    <span class="text-muted small">Nenhuma meta definida para este cliente.</span>
+    <a href="{{ url_for('goals_form', client_slug=client_slug) }}"
+       class="btn btn-outline-primary btn-sm ms-3">
+      <i class="bi bi-plus-lg me-1"></i>Definir metas
+    </a>
+  </div>
+</div>
+{% endif %}
 
 {# ── Best / Worst ─────────────────────────────────────────────────────────── #}
 

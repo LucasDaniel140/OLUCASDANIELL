@@ -9,10 +9,11 @@ from flask import Flask, Response, abort, flash, redirect, render_template, requ
 from config import Config
 from modules.analyzer import analyze
 from modules.comparator import compare as compare_analyses
+from modules.goals import get_goals, list_all_goals, save_goals
 from modules.google_parser import GoogleParser
 from modules.meta_parser import MetaParser
 from modules.report_builder import build_report
-from modules.utils import allowed_file, generate_unique_filename, platform_label
+from modules.utils import allowed_file, generate_unique_filename, normalize_slug, platform_label
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -64,6 +65,11 @@ def fmtdate_filter(iso_str) -> str:
         return datetime.fromisoformat(str(iso_str)).strftime("%d/%m/%Y")
     except (ValueError, TypeError, AttributeError):
         return str(iso_str)
+
+
+@app.template_filter("normalize_slug")
+def normalize_slug_filter(name: str) -> str:
+    return normalize_slug(str(name))
 
 
 # ---------------------------------------------------------------------------
@@ -119,8 +125,10 @@ def upload():
         flash(f"Erro ao processar o arquivo: {exc}", "danger")
         return redirect(url_for("index"))
 
-    period = _format_period(date_start, date_end)
-    result = analyze(df, platform, client_name, period)
+    period      = _format_period(date_start, date_end)
+    client_slug = normalize_slug(client_name)
+    goals       = get_goals(client_slug)
+    result      = analyze(df, platform, client_name, period, goals=goals)
 
     analysis_id            = _make_analysis_id(client_name)
     result["generated_at"] = datetime.now().isoformat()
@@ -131,6 +139,7 @@ def upload():
         "analysis.html",
         result=result,
         analysis_id=analysis_id,
+        client_slug=client_slug,
         platform=platform,
         platform_label=platform_label(platform),
         date_start=date_start,
@@ -148,6 +157,37 @@ def report(analysis_id):
         flash("Relatório não encontrado.", "danger")
         return redirect(url_for("index"))
     return Response(build_report(data), content_type="text/html; charset=utf-8")
+
+
+@app.route("/report/<analysis_id>/pdf")
+def report_pdf(analysis_id):
+    if not re.match(r"^[A-Za-z0-9_-]+$", analysis_id):
+        abort(404)
+    data = _load_analysis(analysis_id)
+    if data is None:
+        flash("Relatório não encontrado.", "danger")
+        return redirect(url_for("index"))
+    html_str = build_report(data)
+    try:
+        from weasyprint import HTML as WeasyprintHTML
+        pdf_bytes = WeasyprintHTML(string=html_str).write_pdf()
+        client    = re.sub(r"[^a-zA-Z0-9_-]", "_", data.get("client", "relatorio"))
+        return Response(
+            pdf_bytes,
+            content_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="relatorio_{client}_{analysis_id}.pdf"'
+                )
+            },
+        )
+    except Exception:
+        flash(
+            "PDF temporariamente indisponível. Use 'Ver Relatório' e pressione"
+            " Ctrl+P / Cmd+P no navegador para salvar como PDF.",
+            "warning",
+        )
+        return redirect(url_for("report", analysis_id=analysis_id))
 
 
 @app.route("/compare")
@@ -180,6 +220,66 @@ def compare():
         result=result,
         id_a=id_a,
         id_b=id_b,
+    )
+
+
+@app.route("/goals")
+def goals():
+    all_goals = list_all_goals()
+    goal_slugs = {g["slug"] for g in all_goals}
+
+    reports = _list_reports()
+    groups  = _group_by_client(reports)
+    clients_without_goals = [
+        {"client": grp["client"], "slug": grp["slug"]}
+        for grp in groups
+        if grp["slug"] not in goal_slugs
+    ]
+
+    return render_template(
+        "goals.html",
+        clients_with_goals=all_goals,
+        clients_without_goals=clients_without_goals,
+    )
+
+
+@app.route("/goals/<client_slug>", methods=["GET", "POST"])
+def goals_form(client_slug):
+    if not re.match(r"^[a-z0-9-]+$", client_slug):
+        abort(404)
+
+    if request.method == "POST":
+        client_name = request.form.get("client_name", "").strip()
+        if not client_name:
+            flash("Nome do cliente é obrigatório.", "danger")
+            return redirect(request.url)
+
+        goals_data = {
+            "target_cpa":      _form_float("target_cpa"),
+            "min_roas":        _form_float("min_roas"),
+            "min_ctr":         _form_float("min_ctr"),
+            "max_cpc":         _form_float("max_cpc"),
+            "monthly_budget":  _form_float("monthly_budget"),
+        }
+        save_goals(client_slug, client_name, goals_data)
+        flash(f"Metas de {client_name} salvas com sucesso.", "success")
+        return redirect(url_for("goals"))
+
+    existing    = get_goals(client_slug)
+    client_name = existing.get("client_name", "") if existing else ""
+
+    if not client_name:
+        reports = _list_reports()
+        for r in reports:
+            if normalize_slug(r["client"]) == client_slug:
+                client_name = r["client"]
+                break
+
+    return render_template(
+        "goals_form.html",
+        client_slug=client_slug,
+        client_name=client_name,
+        goals=existing or {},
     )
 
 
@@ -228,18 +328,18 @@ def _list_reports() -> list[dict]:
             summary    = data.get("summary", {})
             n_critical = sum(1 for a in data.get("alerts", []) if a.get("level") == "critical")
             entries.append({
-                "analysis_id":      analysis_id,
-                "client":           data.get("client", "—"),
-                "platform":         data.get("platform", "—"),
-                "period":           data.get("period", "—"),
-                "generated_at":     data.get("generated_at", ""),
-                "n_campaigns":      len(data.get("campaigns", [])),
-                "n_alerts":         len(data.get("alerts", [])),
-                "n_critical":       n_critical,
-                "total_spend":      summary.get("total_spend", 0),
+                "analysis_id":       analysis_id,
+                "client":            data.get("client", "—"),
+                "platform":          data.get("platform", "—"),
+                "period":            data.get("period", "—"),
+                "generated_at":      data.get("generated_at", ""),
+                "n_campaigns":       len(data.get("campaigns", [])),
+                "n_alerts":          len(data.get("alerts", [])),
+                "n_critical":        n_critical,
+                "total_spend":       summary.get("total_spend", 0),
                 "total_conversions": summary.get("total_conversions", 0),
-                "avg_cpa":          summary.get("avg_cpa", 0),
-                "avg_ctr":          summary.get("avg_ctr", 0),
+                "avg_cpa":           summary.get("avg_cpa", 0),
+                "avg_ctr":           summary.get("avg_ctr", 0),
             })
         except Exception:
             continue
@@ -256,9 +356,12 @@ def _group_by_client(reports: list) -> list[dict]:
     groups = []
     for client, analyses in bucket.items():
         analyses.sort(key=lambda r: r.get("generated_at", ""), reverse=True)
-        groups.append({"client": client, "analyses": analyses})
+        groups.append({
+            "client":   client,
+            "slug":     normalize_slug(client),
+            "analyses": analyses,
+        })
 
-    # Sort groups by most recent analysis descending
     groups.sort(key=lambda g: g["analyses"][0].get("generated_at", ""), reverse=True)
     return groups
 
@@ -276,6 +379,17 @@ def _format_period(date_start: str, date_end: str) -> str:
 
     parts = [fmt(d) for d in (date_start, date_end) if d]
     return " → ".join(parts) if parts else "Período não informado"
+
+
+def _form_float(field: str) -> float | None:
+    """Extract an optional float from the current request form."""
+    val = request.form.get(field, "").strip()
+    if not val:
+        return None
+    try:
+        return float(val.replace(",", "."))
+    except ValueError:
+        return None
 
 
 if __name__ == "__main__":

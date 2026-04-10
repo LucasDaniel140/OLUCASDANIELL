@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Metas por Cliente{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-semibold mb-1">Metas por Cliente</h4>
+    <p class="text-muted mb-0">
+      {{ clients_with_goals | length }} cliente{{ 's' if clients_with_goals | length != 1 }} com metas definidas
+    </p>
+  </div>
+  <a href="{{ url_for('history') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Histórico
+  </a>
+</div>
+
+{# ── Clients with goals ───────────────────────────────────────────────────── #}
+{% if clients_with_goals %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-bullseye text-success"></i>
+    <span class="fw-medium">Metas definidas</span>
+    <span class="badge bg-secondary ms-auto">{{ clients_with_goals | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="ps-3 py-2">Cliente</th>
+            <th class="py-2 text-end">CPA alvo</th>
+            <th class="py-2 text-end">ROAS mín.</th>
+            <th class="py-2 text-end">CTR mín.</th>
+            <th class="py-2 text-end">CPC máx.</th>
+            <th class="py-2 text-end">Orçamento/mês</th>
+            <th class="py-2 pe-3 text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in clients_with_goals %}
+          <tr>
+            <td class="ps-3 py-2 fw-medium">
+              <i class="bi bi-person-circle me-1 opacity-50"></i>
+              {{ g.client_name }}
+            </td>
+            <td class="py-2 text-end small">
+              {% if g.target_cpa %}{{ g.target_cpa | brl }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="py-2 text-end small">
+              {% if g.min_roas %}{{ g.min_roas }}x{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="py-2 text-end small">
+              {% if g.min_ctr %}{{ g.min_ctr | pct }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="py-2 text-end small">
+              {% if g.max_cpc %}{{ g.max_cpc | brl }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="py-2 text-end small">
+              {% if g.monthly_budget %}{{ g.monthly_budget | brl }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="py-2 pe-3 text-end">
+              <a href="{{ url_for('goals_form', client_slug=g.slug) }}"
+                 class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Clients without goals ────────────────────────────────────────────────── #}
+{% if clients_without_goals %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-dash-circle text-muted"></i>
+    <span class="fw-medium">Sem metas definidas</span>
+    <span class="badge bg-secondary ms-auto">{{ clients_without_goals | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <ul class="list-group list-group-flush">
+      {% for c in clients_without_goals %}
+      <li class="list-group-item d-flex justify-content-between align-items-center"
+          style="background:transparent;border-color:#2a2d3a">
+        <span class="fw-medium">
+          <i class="bi bi-person-circle me-1 opacity-50"></i>{{ c.client }}
+        </span>
+        <a href="{{ url_for('goals_form', client_slug=c.slug) }}"
+           class="btn btn-outline-success btn-sm">
+          <i class="bi bi-plus-lg me-1"></i>Definir metas
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if not clients_with_goals and not clients_without_goals %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>
+  <p class="mb-1">Nenhum cliente encontrado.</p>
+  <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-sm mt-2">Fazer primeira análise</a>
+</div>
+{% endif %}
+
+{% endblock %}

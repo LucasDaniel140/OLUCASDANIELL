@@ -15,7 +15,13 @@ import pandas as pd
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def analyze(df: pd.DataFrame, platform: str, client_name: str, period: str) -> dict:
+def analyze(
+    df: pd.DataFrame,
+    platform: str,
+    client_name: str,
+    period: str,
+    goals: dict | None = None,
+) -> dict:
     """
     Main analysis function.
 
@@ -25,17 +31,19 @@ def analyze(df: pd.DataFrame, platform: str, client_name: str, period: str) -> d
     platform    : 'meta' or 'google'.
     client_name : Client identifier string.
     period      : Human-readable period string, e.g. '01/01/2024 → 31/01/2024'.
+    goals       : Optional client goals dict from goals.py (target_cpa, min_roas, etc.).
 
     Returns
     -------
     dict with keys: client, platform, period, summary, campaigns, alerts,
-    recommendations.
+    recommendations, goal_comparison.
     """
     summary = _build_summary(df)
     campaigns = _build_campaigns(df, summary)
     summary = _enrich_summary(summary, campaigns)
-    alerts = _build_alerts(campaigns, summary)
+    alerts = _build_alerts(campaigns, summary, goals)
     recommendations = _build_recommendations(campaigns, alerts, summary)
+    goal_comparison = _compare_goals(summary, goals) if goals else None
 
     return {
         "client": client_name,
@@ -45,6 +53,7 @@ def analyze(df: pd.DataFrame, platform: str, client_name: str, period: str) -> d
         "campaigns": campaigns,
         "alerts": alerts,
         "recommendations": recommendations,
+        "goal_comparison": goal_comparison,
     }
 
 
@@ -280,7 +289,9 @@ def _diagnosis_text(
 # 3. Alerts
 # ---------------------------------------------------------------------------
 
-def _build_alerts(campaigns: list[dict], summary: dict) -> list[dict]:
+def _build_alerts(
+    campaigns: list[dict], summary: dict, goals: dict | None = None
+) -> list[dict]:
     alerts: list[dict] = []
     avg_cpa = summary["avg_cpa"]
     has_revenue = summary["has_revenue"]
@@ -355,9 +366,102 @@ def _build_alerts(campaigns: list[dict], summary: dict) -> list[dict]:
                 ),
             })
 
+    # Budget overspend alert (prepend — highest priority)
+    if goals and goals.get("monthly_budget"):
+        budget = float(goals["monthly_budget"])
+        actual_spend = summary["total_spend"]
+        if budget > 0 and actual_spend > budget * 1.05:
+            overspend_pct = (actual_spend - budget) / budget * 100
+            alerts.insert(0, {
+                "type": "budget_overspend",
+                "level": "critical",
+                "campaign": "geral",
+                "message": (
+                    f"Orçamento mensal excedido em {overspend_pct:.1f}% — "
+                    f"investido R${actual_spend:,.2f} de um orçamento de"
+                    f" R${budget:,.2f}."
+                ),
+            })
+
     # Critical first, then warning
     alerts.sort(key=lambda a: 0 if a["level"] == "critical" else 1)
     return alerts
+
+
+# ---------------------------------------------------------------------------
+# 5. Goal comparison
+# ---------------------------------------------------------------------------
+
+def _compare_goals(summary: dict, goals: dict) -> list[dict]:
+    """Compare summary KPIs against defined client goals."""
+    rows: list[dict] = []
+
+    def _status(actual: float, target: float, higher_is_better: bool) -> str:
+        if target == 0:
+            return "não atingida"
+        diff_pct = (actual - target) / abs(target) * 100
+        if higher_is_better:
+            if diff_pct >= 0:
+                return "atingida"
+            if diff_pct >= -10:
+                return "próxima"
+            return "não atingida"
+        else:
+            if diff_pct <= 0:
+                return "atingida"
+            if diff_pct <= 10:
+                return "próxima"
+            return "não atingida"
+
+    if goals.get("target_cpa") and summary.get("avg_cpa", 0) > 0:
+        target = float(goals["target_cpa"])
+        actual = float(summary["avg_cpa"])
+        rows.append({
+            "label": "CPA alvo",
+            "target": target,
+            "actual": actual,
+            "fmt": "brl",
+            "status": _status(actual, target, False),
+            "higher_is_better": False,
+        })
+
+    if goals.get("min_roas") and summary.get("avg_roas", 0) > 0:
+        target = float(goals["min_roas"])
+        actual = float(summary["avg_roas"])
+        rows.append({
+            "label": "ROAS mínimo",
+            "target": target,
+            "actual": actual,
+            "fmt": "x",
+            "status": _status(actual, target, True),
+            "higher_is_better": True,
+        })
+
+    if goals.get("min_ctr") and summary.get("avg_ctr", 0) > 0:
+        target = float(goals["min_ctr"])
+        actual = float(summary["avg_ctr"])
+        rows.append({
+            "label": "CTR mínimo",
+            "target": target,
+            "actual": actual,
+            "fmt": "pct",
+            "status": _status(actual, target, True),
+            "higher_is_better": True,
+        })
+
+    if goals.get("max_cpc") and summary.get("avg_cpc", 0) > 0:
+        target = float(goals["max_cpc"])
+        actual = float(summary["avg_cpc"])
+        rows.append({
+            "label": "CPC máximo",
+            "target": target,
+            "actual": actual,
+            "fmt": "brl",
+            "status": _status(actual, target, False),
+            "higher_is_better": False,
+        })
+
+    return rows
 
 
 # ---------------------------------------------------------------------------
