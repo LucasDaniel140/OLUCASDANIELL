@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Flask / runtime
+instance/
+uploads/*.csv
+reports/*.json
+
+# OS
+.DS_Store
+Thumbs.db
