@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "campaign-analyzer/app.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "campaign-analyzer/app.py" }
+  ]
+}
