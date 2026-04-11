@@ -38,20 +38,24 @@ def analyze(
     dict with keys: client, platform, period, summary, campaigns, alerts,
     recommendations, goal_comparison.
     """
-    summary = _build_summary(df)
-    campaigns = _build_campaigns(df, summary)
-    summary = _enrich_summary(summary, campaigns)
-    alerts = _build_alerts(campaigns, summary, goals)
+    summary         = _build_summary(df)
+    campaigns       = _build_campaigns(df, summary)
+    summary         = _enrich_summary(summary, campaigns)
+    adsets          = _build_adsets(df, summary)
+    ads             = _build_ads(df, summary)
+    alerts          = _build_alerts(campaigns, summary, goals)
     recommendations = _build_recommendations(campaigns, alerts, summary)
     goal_comparison = _compare_goals(summary, goals) if goals else None
 
     return {
-        "client": client_name,
-        "platform": platform,
-        "period": period,
-        "summary": summary,
-        "campaigns": campaigns,
-        "alerts": alerts,
+        "client":          client_name,
+        "platform":        platform,
+        "period":          period,
+        "summary":         summary,
+        "campaigns":       campaigns,
+        "adsets":          adsets,
+        "ads":             ads,
+        "alerts":          alerts,
         "recommendations": recommendations,
         "goal_comparison": goal_comparison,
     }
@@ -143,6 +147,77 @@ def _build_campaigns(df: pd.DataFrame, summary: dict) -> list[dict]:
     # Sort by spend descending
     campaigns.sort(key=lambda c: c["spend"], reverse=True)
     return campaigns
+
+
+def _build_adsets(df: pd.DataFrame, summary: dict) -> list[dict]:
+    """Return per-adset KPIs grouped by (campaign_name, adset_name)."""
+    col = "adset_name"
+    if col not in df.columns:
+        return []
+    if df[col].fillna("").str.strip().eq("").all():
+        return []
+
+    avg_cpc     = summary["avg_cpc"]
+    avg_cpa     = summary["avg_cpa"]
+    has_revenue = summary["has_revenue"]
+    total_spend = summary["total_spend"]
+
+    rows: list[dict] = []
+    for (camp, adset), group in df.groupby(["campaign_name", col], dropna=False):
+        adset_clean = str(adset).strip() if adset and str(adset).strip() not in ("", "nan") else None
+        if not adset_clean:
+            continue
+        kpis      = _compute_kpis(group)
+        score     = _compute_score(kpis, avg_cpc, avg_cpa, has_revenue)
+        spend_pct = round(kpis["spend"] / total_spend * 100, 1) if total_spend else 0.0
+        rows.append({
+            "campaign_name": str(camp).strip() if camp else "—",
+            "adset_name":    adset_clean,
+            **kpis,
+            "score":         score,
+            "status":        _status_label(score),
+            "spend_pct":     spend_pct,
+        })
+
+    rows.sort(key=lambda r: r["spend"], reverse=True)
+    return rows
+
+
+def _build_ads(df: pd.DataFrame, summary: dict) -> list[dict]:
+    """Return per-ad KPIs grouped by (campaign_name, adset_name, ad_name)."""
+    col = "ad_name"
+    if col not in df.columns:
+        return []
+    if df[col].fillna("").str.strip().eq("").all():
+        return []
+
+    avg_cpc     = summary["avg_cpc"]
+    avg_cpa     = summary["avg_cpa"]
+    has_revenue = summary["has_revenue"]
+    total_spend = summary["total_spend"]
+
+    rows: list[dict] = []
+    for (camp, adset, ad), group in df.groupby(
+        ["campaign_name", "adset_name", col], dropna=False
+    ):
+        ad_clean = str(ad).strip() if ad and str(ad).strip() not in ("", "nan") else None
+        if not ad_clean:
+            continue
+        kpis      = _compute_kpis(group)
+        score     = _compute_score(kpis, avg_cpc, avg_cpa, has_revenue)
+        spend_pct = round(kpis["spend"] / total_spend * 100, 1) if total_spend else 0.0
+        rows.append({
+            "campaign_name": str(camp).strip() if camp else "—",
+            "adset_name":    str(adset).strip() if adset and str(adset).strip() not in ("", "nan") else "—",
+            "ad_name":       ad_clean,
+            **kpis,
+            "score":         score,
+            "status":        _status_label(score),
+            "spend_pct":     spend_pct,
+        })
+
+    rows.sort(key=lambda r: r["spend"], reverse=True)
+    return rows
 
 
 def _compute_kpis(group: pd.DataFrame) -> dict:

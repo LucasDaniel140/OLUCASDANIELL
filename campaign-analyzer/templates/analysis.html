@@ -347,6 +347,148 @@
   </div>
 </div>
 
+{# ── Adsets ───────────────────────────────────────────────────────────────── #}
+
+{% if result.adsets %}
+<div class="card mb-4 shadow-sm">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-collection"></i>
+    <span class="fw-medium">Análise por Conjunto (Adset)</span>
+    <span class="badge bg-secondary ms-auto">{{ result.adsets | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="ps-3 py-2">Campanha / Conjunto</th>
+            <th class="py-2 text-end">Investido</th>
+            <th class="py-2 text-end">%</th>
+            <th class="py-2 text-end">Cliques</th>
+            <th class="py-2 text-end">CTR</th>
+            <th class="py-2 text-end">CPC</th>
+            <th class="py-2 text-end">Conv.</th>
+            <th class="py-2 text-end">CPA</th>
+            {% if result.summary.has_revenue %}
+            <th class="py-2 text-end">ROAS</th>
+            {% endif %}
+            <th class="py-2" style="min-width:110px">Score</th>
+            <th class="py-2">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in result.adsets %}
+          <tr>
+            <td class="ps-3 py-2" style="max-width:260px">
+              <div class="fw-medium text-truncate small" title="{{ a.adset_name }}">{{ a.adset_name }}</div>
+              <div class="diagnosis-text text-muted">{{ a.campaign_name }}</div>
+            </td>
+            <td class="py-2 text-end text-nowrap small">{{ a.spend | brl }}</td>
+            <td class="py-2 text-end text-nowrap small">{{ a.spend_pct }}%</td>
+            <td class="py-2 text-end small">{{ a.clicks | num }}</td>
+            <td class="py-2 text-end small {% if a.ctr < 0.5 %}text-danger{% elif a.ctr >= 2 %}text-success{% endif %}">
+              {{ a.ctr | pct }}
+            </td>
+            <td class="py-2 text-end small">{{ a.cpc | brl }}</td>
+            <td class="py-2 text-end small">
+              {% if a.conversions == 0 %}<span class="text-muted">0</span>{% else %}{{ a.conversions }}{% endif %}
+            </td>
+            <td class="py-2 text-end text-nowrap small">
+              {% if a.cpa > 0 %}{{ a.cpa | brl }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            {% if result.summary.has_revenue %}
+            <td class="py-2 text-end text-nowrap small">
+              {% if a.roas > 0 %}
+                <span class="{% if a.roas >= 3 %}text-success{% elif a.roas >= 1 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ a.roas }}x
+                </span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            {% endif %}
+            <td class="py-2 pe-2">{{ score_bar(a.score) }}</td>
+            <td class="py-2">{{ status_badge(a.status) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Ads ──────────────────────────────────────────────────────────────────── #}
+
+{% if result.ads %}
+<div class="card mb-4 shadow-sm">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-image"></i>
+    <span class="fw-medium">Análise por Anúncio</span>
+    <span class="badge bg-secondary ms-auto">{{ result.ads | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="ps-3 py-2">Anúncio / Conjunto</th>
+            <th class="py-2 text-end">Investido</th>
+            <th class="py-2 text-end">%</th>
+            <th class="py-2 text-end">Cliques</th>
+            <th class="py-2 text-end">CTR</th>
+            <th class="py-2 text-end">CPC</th>
+            <th class="py-2 text-end">Conv.</th>
+            <th class="py-2 text-end">CPA</th>
+            {% if result.summary.has_revenue %}
+            <th class="py-2 text-end">ROAS</th>
+            {% endif %}
+            <th class="py-2" style="min-width:110px">Score</th>
+            <th class="py-2">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in result.ads %}
+          <tr>
+            <td class="ps-3 py-2" style="max-width:260px">
+              <div class="fw-medium text-truncate small" title="{{ a.ad_name }}">{{ a.ad_name }}</div>
+              <div class="diagnosis-text text-muted">{{ a.campaign_name }}
+                {% if a.adset_name and a.adset_name != '—' %}
+                  · {{ a.adset_name }}
+                {% endif %}
+              </div>
+            </td>
+            <td class="py-2 text-end text-nowrap small">{{ a.spend | brl }}</td>
+            <td class="py-2 text-end text-nowrap small">{{ a.spend_pct }}%</td>
+            <td class="py-2 text-end small">{{ a.clicks | num }}</td>
+            <td class="py-2 text-end small {% if a.ctr < 0.5 %}text-danger{% elif a.ctr >= 2 %}text-success{% endif %}">
+              {{ a.ctr | pct }}
+            </td>
+            <td class="py-2 text-end small">{{ a.cpc | brl }}</td>
+            <td class="py-2 text-end small">
+              {% if a.conversions == 0 %}<span class="text-muted">0</span>{% else %}{{ a.conversions }}{% endif %}
+            </td>
+            <td class="py-2 text-end text-nowrap small">
+              {% if a.cpa > 0 %}{{ a.cpa | brl }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            {% if result.summary.has_revenue %}
+            <td class="py-2 text-end text-nowrap small">
+              {% if a.roas > 0 %}
+                <span class="{% if a.roas >= 3 %}text-success{% elif a.roas >= 1 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ a.roas }}x
+                </span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            {% endif %}
+            <td class="py-2 pe-2">{{ score_bar(a.score) }}</td>
+            <td class="py-2">{{ status_badge(a.status) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# ── Recommendations ──────────────────────────────────────────────────────── #}
 
 {% if result.recommendations %}
